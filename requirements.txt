@@ -1,4 +1,6 @@
-numpy=2.4.6
-pandas=3.0.3
-streamlit=1.59.2
-cv2=5.0.0
+NumPy==2.4.6
+Pandas==3.0.3
+Streamlit==1.59.2
+OpenCV== 5.0.0
+TensorFlow==2.21.0
+Drawable Canvas== 0.9.3
