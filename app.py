@@ -136,11 +136,11 @@ if predict:
 
         gray = cv2.resize(gray, (28, 28))
 
-        gray = 255 - gray
+        #gray = 255 - gray
 
         gray = gray / 255.0
 
-        gray = gray.reshape(1, 784)
+        gray = gray.reshape(-1, 784)
 
         prediction = model.predict(gray)
 
