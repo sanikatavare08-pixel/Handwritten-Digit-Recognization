@@ -1,162 +1,266 @@
-#pip install opencv-python
-#pip install streamlit-drawable-canvas
-
-
 import streamlit as st
 import numpy as np
-import cv2
-from streamlit_drawable_canvas import st_canvas
+from PIL import Image
+from tensorflow.keras.preprocessing import image
 from tensorflow.keras.models import load_model
 
 # ---------------- Page Config ----------------
 st.set_page_config(
-    page_title="Handwritten Digit Recognition",
-    page_icon="✍️",
-    layout="centered"
+    page_title="Face Mask Detection",
+    page_icon="😷",
+    layout="wide"
 )
 
-# ---------------- Custom CSS ----------------
+# ---------------- Load Model ----------------
+import os
+import gdown
+from tensorflow.keras.models import load_model
+
+FILE_ID = "1fSLHyKh8-l3_9AM_-61V90QNLAkncqgm"
+
+if not os.path.exists("mask_final.keras"):
+    gdown.download(
+        f"https://drive.google.com/uc?id={FILE_ID}",
+        "mask_final.keras",
+        quiet=False
+    )
+
+model = load_model("mask_final.keras")
+
+
+#model = load_model("https://drive.google.com/file/d/1fSLHyKh8-l3_9AM_-61V90QNLAkncqgm/view?usp=drive_link")
+
+# ---------------- Session State ----------------
+if "open_camera" not in st.session_state:
+    st.session_state.open_camera = False
+
+# ---------------- CSS ----------------
 st.markdown("""
 <style>
 
 .stApp{
-background:linear-gradient(135deg,#141E30,#243B55);
+    background: linear-gradient(to right,#EAF6FF,#FFFFFF);
 }
 
-.main-title{
-text-align:center;
-font-size:48px;
-font-weight:800;
-color:white;
+.title{
+    text-align:center;
+    font-size:45px;
+    font-weight:bold;
+    color:#0F52BA;
 }
 
 .subtitle{
-text-align:center;
-color:#D1D5DB;
-font-size:20px;
-margin-bottom:30px;
+    text-align:center;
+    color:#555;
+    font-size:18px;
+    margin-bottom:25px;
 }
 
-.glass{
-width:340px;
-margin:auto;
-padding:20px;
-background:rgba(255,255,255,.12);
-backdrop-filter:blur(20px);
-border-radius:20px;
-border:1px solid rgba(255,255,255,.2);
-box-shadow:0 8px 25px rgba(0,0,0,.3);
+#.card{
+  #  background:white;
+   # padding:20px;
+   # border-radius:20px;
+   # box-shadow:0px 5px 18px rgba(0,0,0,0.15);
 }
 
-.result-card{
-width:400px;
-margin:auto;
-margin-top:25px;
-padding:25px;
-background:white;
-border-radius:18px;
-text-align:center;
-box-shadow:0 10px 25px rgba(0,0,0,.25);
+.result-good{
+    background:#D4EDDA;
+    color:#155724;
+    padding:20px;
+    border-radius:15px;
+    text-align:center;
+    font-size:28px;
+    font-weight:bold;
 }
 
-.big-digit{
-font-size:80px;
-font-weight:bold;
-color:#4F46E5;
+.result-bad{
+    background:#F8D7DA;
+    color:#721C24;
+    padding:20px;
+    border-radius:15px;
+    text-align:center;
+    font-size:28px;
+    font-weight:bold;
 }
 
-.stButton>button{
-border-radius:50px;
-font-size:18px;
-font-weight:bold;
-height:55px;
-background:linear-gradient(90deg,#6366F1,#8B5CF6);
-color:white;
-border:none;
-transition:.3s;
+div.stButton > button{
+    width:100%;
+    height:50px;
+    border-radius:12px;
+    font-size:18px;
+    font-weight:bold;
 }
 
-.stButton>button:hover{
-transform:scale(1.05);
+div.stButton > button:hover{
+    background:#0F52BA;
+    color:white;
 }
-            
+
+footer{
+    visibility:hidden;
+}
+
+</style>
 """, unsafe_allow_html=True)
-# ---------------- Load Model ----------------
-model = load_model("digit_recognition_model.keras")
 
-# ---------------- Sidebar ----------------
-st.sidebar.title("📌 Instructions")
-
-st.sidebar.write("""
-1. Draw a digit (0-9)
-
-2. Click **Predict**
-
-3. Model will recognize your digit
-
-Made by ❤️ Sanika Tavare
-""")
-
-# ---------------- Title ----------------
-st.markdown('<div class="main-title">✍️ Handwritten Digit Recognition</div>',
-            unsafe_allow_html=True)
-
+# ---------------- Header ----------------
 st.markdown(
-    '<div class="subtitle">Draw any digit from 0 to 9 and let AI predict it!</div>',
+    "<div class='title'>😷 Face Mask Detection using CNN</div>",
     unsafe_allow_html=True
 )
 
-# ---------------- Card ----------------
-st.markdown('<div>', unsafe_allow_html=True)
-
-canvas_result = st_canvas(
-                        fill_color="#00000000",
-                         stroke_width=10,
-                         stroke_color="#FFFFFF",
-                         background_color="#FFFFFFF",
-                         width=280,
-                         height=280,
-                         drawing_mode="freedraw",
-                         key='canvas'
+st.markdown(
+    "<div class='subtitle'>Upload an image or use your camera to detect whether a face is wearing a mask.</div>",
+    unsafe_allow_html=True
 )
 
-st.markdown("</div>", unsafe_allow_html=True)
+# ---------------- Sidebar ----------------
+with st.sidebar:
 
-# ---------------- Prediction ----------------
-predict=st.button("🔍 Predict Digit")
+    st.title("📌 About Project")
 
+    st.info("""
+This application uses a **Convolutional Neural Network (CNN)** to classify whether a person is wearing a face mask.
 
-if predict:
+### Features
+- 📂 Upload Image
+- 📸 Live Camera
+- ⚡ Fast Prediction
+- 📊 Confidence Score
 
-    if canvas_result.image_data is not None:
+Developed using **TensorFlow** and **Streamlit**.
+""")
 
-        img = canvas_result.image_data.astype(np.uint8)
+# ---------------- Prediction Function ----------------
+def predict_mask(img):
 
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img = img.resize((128, 128))
+    img_array = image.img_to_array(img)
+    img_array = img_array / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
 
-        gray = cv2.resize(gray, (28, 28))
+    prediction = model.predict(img_array, verbose=0)
 
-        #gray = 255 - gray
+    probability = prediction[0][0]
 
-        gray = gray / 255.0
+    return probability
 
-        gray = gray.reshape(-1, 784)
+# ---------------- Layout ----------------
+left, right = st.columns([1.3,1])
 
-        prediction = model.predict(gray)
+# ================= LEFT =================
+with left:
 
-        digit = np.argmax(prediction)
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
 
+    uploaded_file = st.file_uploader(
+        "📂 Upload Face Image",
+        type=["jpg", "jpeg", "png"]
+    )
 
-    confidence = float(np.max(prediction) * 100)
+    # ---------- Uploaded Image Prediction ----------
+    if uploaded_file is not None:
 
-        
+        img = Image.open(uploaded_file)
 
-    st.markdown(f"""
-    <div class="result-card">
-        <h2>🎯 Prediction</h2>
-        <div class="big-digit">{digit}</div>
-        <h3>Confidence: {confidence:.2f}%</h3>
-    </div>
-    """, unsafe_allow_html=True)
+        st.image(
+            img,
+            caption="Uploaded Image",
+            use_container_width=True
+        )
 
-    st.progress(confidence / 100)
+        prob = predict_mask(img)
+
+        st.write("### Prediction")
+
+        if prob > 0.5:
+
+            st.markdown(
+                "<div class='result-bad'>❌ WITHOUT MASK</div>",
+                unsafe_allow_html=True
+            )
+
+            confidence = prob
+
+        else:
+
+            st.markdown(
+                "<div class='result-good'>✅ WITH MASK</div>",
+                unsafe_allow_html=True
+            )
+
+            confidence = 1 - prob
+
+        st.write("### Confidence")
+
+        st.progress(float(confidence))
+
+        st.metric("Confidence", f"{confidence:.2%}")
+
+    # ---------- Camera Buttons ----------
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("📸 Open Camera"):
+            st.session_state.open_camera = True
+
+    with col2:
+        if st.button("❌ Close Camera"):
+            st.session_state.open_camera = False
+
+# ---------------- Camera ----------------
+if st.session_state.open_camera:
+
+    st.markdown("---")
+
+    camera_image = st.camera_input("📷 Capture Image")
+
+    if camera_image is not None:
+
+        img = Image.open(camera_image)
+
+        st.image(
+            img,
+            caption="Captured Image",
+            use_container_width=True
+        )
+
+        prob = predict_mask(img)
+
+        st.write("### Prediction")
+
+        if prob > 0.5:
+
+            st.markdown(
+                "<div class='result-bad'>❌😊WITHOUT MASK</div>",
+                unsafe_allow_html=True
+            )
+
+            confidence = prob
+
+        else:
+
+            st.markdown(
+                "<div class='result-good'>✅😷WITH MASK</div>",
+                unsafe_allow_html=True
+            )
+
+            confidence = 1 - prob
+
+        st.write("### Confidence")
+
+        st.progress(float(confidence))
+
+        st.metric("Confidence", f"{confidence:.2%}")
+
+# ---------------- Footer ----------------
+st.markdown("---")
+
+st.markdown(
+"""
+<div style='text-align:center;color:gray;'>
+Made by ❤️  <b>Sanika</b> <b>Tavare</b>
+</div>
+""",
+unsafe_allow_html=True
+)
